@@ -56,7 +56,7 @@ function hydrateRows(data: SourceData, rows: ReadyRow[]): { rows: SpecificationR
 
 function finish(rows: SpecificationRow[], invalidSku: string[]): CalculationResult {
   const categories = Array.from(
-    new Set(rows.map((row) => row.category).filter((value): value is SmartCategory => SMART_CATEGORIES.includes(value as SmartCategory))),
+    new Set(rows.filter((row) => row.quantity > 0).map((row) => row.category).filter((value): value is SmartCategory => SMART_CATEGORIES.includes(value as SmartCategory))),
   );
   return {
     rows,
@@ -78,6 +78,7 @@ export function calculateReady(
     selectedCategories: SmartCategory[];
     includeGift: boolean;
     includeLeakProtection: boolean;
+    quantityOverrides?: Record<string, number>;
   },
 ): CalculationResult {
   const variant = data.readyRows.filter(
@@ -96,11 +97,21 @@ export function calculateReady(
     return options.selectedCategories.includes(row.category as SmartCategory);
   });
   const uniqueBySource = Array.from(new Map(selected.map((row) => [row.id, row])).values());
-  const hydrated = hydrateRows(data, uniqueBySource);
+  const adjusted = uniqueBySource.map((row) => ({
+    ...row,
+    quantity: Object.prototype.hasOwnProperty.call(options.quantityOverrides ?? {}, row.id)
+      ? Math.min(999, Math.max(0, Math.floor(options.quantityOverrides?.[row.id] ?? 0)))
+      : row.quantity,
+  }));
+  const hydrated = hydrateRows(data, adjusted);
   return finish(hydrated.rows, hydrated.invalidSku);
 }
 
-export function calculateManual(data: SourceData, cart: Record<string, number>): CalculationResult {
+export function calculateManual(
+  data: SourceData,
+  cart: Record<string, number>,
+  roomAssignments: Record<string, string> = {},
+): CalculationResult {
   const sourceRows: ReadyRow[] = Object.entries(cart)
     .filter(([, quantity]) => quantity > 0)
     .map(([sku, quantity]) => {
@@ -113,7 +124,7 @@ export function calculateManual(data: SourceData, cart: Record<string, number>):
         sourceName: product?.name ?? sku,
         sku,
         quantity,
-        room: 'Ручная комплектация',
+        room: roomAssignments[sku] ?? 'Назначить комнату',
         category: sourceCategories[0] ?? product?.description ?? 'Каталог',
         gift: false,
         recommended: false,

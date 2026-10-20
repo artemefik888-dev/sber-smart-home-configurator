@@ -11,7 +11,7 @@
     "build": "vite build",
     "start": "vite preview",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "test": "node scripts/verify_data.mjs"
+    "test": "node scripts/verify_data.mjs && node --experimental-strip-types scripts/verify_release2.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

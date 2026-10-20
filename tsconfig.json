@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "types": ["node", "vite/client"],
     "resolveJsonModule": true,
     "isolatedModules": true,

@@ -1,7 +1,15 @@
 export type ApartmentKey = 'studio' | 'one' | 'two' | 'three';
 export type EquipmentColor = 'white' | 'carbon';
 export type CalculationMode = 'rooms' | 'categories' | 'manual';
+export type ReadyCalculationMode = Exclude<CalculationMode, 'manual'>;
 export type SmartCategory = 'Свет' | 'Климат' | 'Безопасность';
+export type ManualRoom =
+  | 'Прихожая/коридор'
+  | 'Кухня'
+  | 'Гостиная'
+  | 'Спальня 1'
+  | 'Спальня 2/Детская'
+  | 'Ванная';
 
 export interface Apartment {
   key: ApartmentKey;
@@ -72,6 +80,7 @@ export interface ManualHints {
 }
 
 export interface ConfiguratorProject {
+  schemaVersion?: 2;
   id: string;
   name: string;
   number: string;
@@ -84,7 +93,9 @@ export interface ConfiguratorProject {
   includeGift: boolean;
   includeLeakProtection: boolean;
   manualCart: Record<string, number>;
-  manualHints: ManualHints;
+  manualRooms: Record<string, ManualRoom>;
+  readyQuantities: Record<ReadyCalculationMode, Record<string, number>>;
+  manualHints?: ManualHints;
 }
 
 export interface CalculationResult {

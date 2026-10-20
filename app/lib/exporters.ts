@@ -1,7 +1,7 @@
 'use client';
 
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
-import type { Apartment, CalculationMode, EquipmentColor, ScenarioGroup, SourceData, SpecificationRow } from '../data/types';
+import type { Apartment, CalculationMode, CalculationResult, EquipmentColor, ScenarioGroup, SourceData, SpecificationRow } from '../data/types';
 import { publicAsset } from './public-path';
 
 const currency = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
@@ -25,7 +25,6 @@ export interface ExportContext {
   scenarios: ScenarioGroup[];
   total: number;
   devices: number;
-  uniqueSku: number;
   data: SourceData;
 }
 
@@ -58,7 +57,6 @@ function projectRows(context: ExportContext): (string | number)[][] {
     ['Дата выгрузки', new Date().toLocaleString('ru-RU')],
     ['Версия данных', `${context.data.meta.version}; цены с ${context.data.meta.priceDate}`],
     ['Количество устройств', context.devices],
-    ['Уникальных SKU', context.uniqueSku],
     ['Итог оборудования', context.total],
     ['Предупреждение', warning],
   ];
@@ -69,7 +67,7 @@ export async function exportExcel(context: ExportContext) {
   const workbook = XLSX.utils.book_new();
   const project = XLSX.utils.aoa_to_sheet(projectRows(context));
   project['!cols'] = [{ wch: 24 }, { wch: 70 }];
-  if (project.B10) project.B10.z = '#,##0 "₽"';
+  if (project.B9) project.B9.z = '#,##0 "₽"';
   XLSX.utils.book_append_sheet(workbook, project, 'Проект');
 
   const specification = XLSX.utils.aoa_to_sheet([
@@ -102,6 +100,48 @@ export async function exportExcel(context: ExportContext) {
 
   const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', compression: true });
   downloadBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${safeName(context.projectNumber || context.projectName)}.xlsx`);
+}
+
+export async function exportComparisonExcel(context: {
+  projectName: string;
+  projectNumber: string;
+  apartment: Apartment;
+  color: EquipmentColor;
+  rooms: CalculationResult;
+  categories: CalculationResult;
+}) {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.utils.book_new();
+  const append = (title: 'По помещениям' | 'По категориям', result: CalculationResult) => {
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['Проект', context.projectName],
+      ['Внутренний номер', context.projectNumber],
+      ['Квартира', `${context.apartment.name}, ${context.apartment.area}`],
+      ['Режим расчёта', title],
+      ['Цвет оборудования', colorLabel[context.color]],
+      [],
+      ['Категория', 'Помещение', 'Название товара', 'SKU', 'Количество', 'Цена за единицу', 'Сумма', 'Статус'],
+      ...result.rows.map((row) => [
+        row.category,
+        row.room,
+        row.name,
+        row.sku,
+        row.quantity,
+        row.price,
+        row.amount,
+        row.gift ? 'Подарок · Умная прихожая' : row.recommended ? 'Рекомендуемый модуль' : '',
+      ]),
+      ['', '', '', '', result.devices, '', result.total, 'Итого'],
+    ]);
+    sheet['!cols'] = [
+      { wch: 18 }, { wch: 24 }, { wch: 64 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 26 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, sheet, title);
+  };
+  append('По помещениям', context.rooms);
+  append('По категориям', context.categories);
+  const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', compression: true });
+  downloadBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${safeName(context.projectNumber || context.projectName)}-сравнение.xlsx`);
 }
 
 async function imageDataUrl(path: string) {
@@ -165,7 +205,7 @@ export async function exportPdf(context: ExportContext) {
           { text: [{ text: 'Квартира\n', bold: true }, `${context.apartment.name}, ${context.apartment.area}`] },
           { text: [{ text: 'Расчёт\n', bold: true }, modeLabel[context.mode]] },
           { text: [{ text: 'Цвет\n', bold: true }, colorLabel[context.color]] },
-          { text: [{ text: 'Устройства\n', bold: true }, `${number.format(context.devices)} · ${context.uniqueSku} SKU`] },
+          { text: [{ text: 'Устройства\n', bold: true }, number.format(context.devices)] },
         ],
         columnGap: 12,
         margin: [0, 0, 0, 16],
@@ -173,16 +213,16 @@ export async function exportPdf(context: ExportContext) {
       { text: 'Спецификация', style: 'section' },
       { table: { headerRows: 1, widths: [46, 68, '*', 34, 55, 58, 54], body }, layout: { fillColor: (rowIndex) => rowIndex === 0 ? '#148f66' : rowIndex % 2 === 0 ? '#f3f7f4' : null, hLineColor: '#d8e2dc', vLineColor: '#d8e2dc', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 5, paddingBottom: () => 5 } },
       { columns: [{ text: `Версия данных: ${context.data.meta.version}\nРРЦ с ${context.data.meta.priceDate}`, color: '#66736c', fontSize: 8, margin: [0, 12, 0, 0] }, { text: `Итого: ${currency.format(context.total)}`, alignment: 'right', bold: true, fontSize: 15, color: '#08734f', margin: [0, 12, 0, 0] }] },
-      ...(belowMinimum ? [{ text: `Сумма меньше минимального заказа ${currency.format(context.data.meta.minimumOrder)}. Состав и итог не изменены.`, color: '#8b5c00', bold: true, margin: [0, 10, 0, 0] }] : []),
-      { text: 'Сценарии', style: 'section', pageBreak: context.rows.length > 14 ? 'before' : undefined },
+      ...(belowMinimum ? [{ text: `Сумма меньше минимального заказа ${currency.format(context.data.meta.minimumOrder)}. Состав и итог не изменены.`, color: '#8b5c00', bold: true, margin: [0, 10, 0, 0] as [number, number, number, number] }] : []),
+      { text: 'Сценарии', style: 'section', pageBreak: context.rows.length > 14 ? 'before' as const : undefined },
       ...(context.scenarios.length
         ? context.scenarios.flatMap((group) => [
             { text: group.category, style: 'scenarioTitle' },
-            { text: group.intro, margin: [0, 0, 0, 5] },
-            { ul: group.items.map((item) => ({ text: item })), margin: [12, 0, 0, 10] },
+            { text: group.intro, margin: [0, 0, 0, 5] as [number, number, number, number] },
+            { ul: group.items.map((item) => ({ text: item })), margin: [12, 0, 0, 10] as [number, number, number, number] },
           ])
         : [{ text: 'Для текущего состава сценарии из источника не определены.', color: '#66736c' }]),
-      { text: `Сформировано ${new Date().toLocaleString('ru-RU')}`, color: '#66736c', fontSize: 8, margin: [0, 12, 0, 0] },
+      { text: `Сформировано ${new Date().toLocaleString('ru-RU')}`, color: '#66736c', fontSize: 8, margin: [0, 12, 0, 0] as [number, number, number, number] },
     ],
     styles: {
       title: { fontSize: 22, bold: true, color: '#14261e' },
