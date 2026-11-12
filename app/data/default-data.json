@@ -1,10 +1,10 @@
 {
   "meta": {
-    "version": "2Q 2026",
-    "priceDate": "07.04.2026",
+    "version": "4Q 2026",
+    "priceDate": "4Q 2026",
     "currency": "RUB",
     "minimumOrder": 15000,
-    "source": "Встроенные исходные данные"
+    "source": "Прайс-лист Умный дом Sber · 4Q 2026"
   },
   "apartments": [
     {
@@ -33,6 +33,33 @@
     }
   ],
   "catalog": [
+    {
+      "sku": "SBDV-00320GR",
+      "name": "Интеллектуальная колонка СберБум 2.0, зеленый",
+      "description": "Умная колонка с голосовым управлением",
+      "price": 21990,
+      "image": "/products/sbdv-00320gr.png",
+      "badge": "",
+      "sourceRow": 2
+    },
+    {
+      "sku": "SBDV-00320LG",
+      "name": "Интеллектуальная колонка СберБум 2.0, светло-серый",
+      "description": "Умная колонка с голосовым управлением",
+      "price": 21990,
+      "image": "/products/sbdv-00320lg.png",
+      "badge": "",
+      "sourceRow": 3
+    },
+    {
+      "sku": "SBDV-00320G",
+      "name": "Интеллектуальная колонка СберБум 2.0, тёмно-серый",
+      "description": "Умная колонка с голосовым управлением",
+      "price": 21990,
+      "image": "/products/sbdv-00320g.png",
+      "badge": "",
+      "sourceRow": 4
+    },
     {
       "sku": "SBDV-00006",
       "name": "SberBox_2 sbdv-00006",
@@ -307,7 +334,7 @@
       "sku": "ATN000145Z",
       "name": "Умная розетка встраиваемая AtlasDesign Smart, белый",
       "description": "Электроустановочные изделия",
-      "price": 3990,
+      "price": 2790,
       "image": "/products/atn000145z.png",
       "badge": "",
       "sourceRow": 32
@@ -316,7 +343,7 @@
       "sku": "ATN001045Z",
       "name": "Умная розетка встраиваемая AtlasDesign Smart, карбон",
       "description": "Электроустановочные изделия",
-      "price": 4790,
+      "price": 3290,
       "image": "/products/atn001045z.png",
       "badge": "",
       "sourceRow": 33
@@ -343,7 +370,7 @@
       "sku": "ATN000113Z",
       "name": "Умный выключатель одноклавишный AtlasDesign Smart, белый (необходимо подключение нейтрали)",
       "description": "Электроустановочные изделия",
-      "price": 3990,
+      "price": 2590,
       "image": "/products/atn000113z.png",
       "badge": "",
       "sourceRow": 36
@@ -352,7 +379,7 @@
       "sku": "ATN001013Z",
       "name": "Умный выключатель одноклавишный AtlasDesign Smart, карбон (необходимо подключение нейтрали)",
       "description": "Электроустановочные изделия",
-      "price": 4790,
+      "price": 2990,
       "image": "/products/atn001013z.png",
       "badge": "",
       "sourceRow": 37
@@ -361,7 +388,7 @@
       "sku": "ATN000153Z",
       "name": "Умный выключатель двухклавишный AtlasDesign Smart, белый (необходимо подключение нейтрали)",
       "description": "Электроустановочные изделия",
-      "price": 4990,
+      "price": 3190,
       "image": "/products/atn000153z.png",
       "badge": "",
       "sourceRow": 38
@@ -370,7 +397,7 @@
       "sku": "ATN001053Z",
       "name": "Умный выключатель двухклавишный AtlasDesign Smart, карбон (необходимо подключение нейтрали)",
       "description": "Электроустановочные изделия",
-      "price": 5990,
+      "price": 3690,
       "image": "/products/atn001053z.png",
       "badge": "",
       "sourceRow": 39
@@ -379,7 +406,7 @@
       "sku": "ATN000115Z",
       "name": "Умный выключатель встраиваемый одноклавишный AtlasDesign Smart, с опц. нейтралью, модель SBDV-00197, цвет белый",
       "description": "Электроустановочные изделия",
-      "price": 3990,
+      "price": 2590,
       "image": "/products/atn000115z.png",
       "badge": "новинка",
       "sourceRow": 40
@@ -388,7 +415,7 @@
       "sku": "ATN001015Z",
       "name": "Умный выключатель встраиваемый одноклавишный AtlasDesign Smart, с опц. нейтралью, модель SBDV-00197, цвет карбон",
       "description": "Электроустановочные изделия",
-      "price": 4790,
+      "price": 2990,
       "image": "/products/atn001015z.png",
       "badge": "новинка",
       "sourceRow": 41
@@ -397,8 +424,8 @@
       "sku": "ATN000117Z",
       "name": "Умный выключатель встраиваемый двухклавишный AtlasDesign Smart, с опц. нейтралью, модель SBDV-00200, цвет белый",
       "description": "Электроустановочные изделия",
-      "price": 4990,
-      "image": null,
+      "price": 3190,
+      "image": "/products/atn000117z.png",
       "badge": "новинка",
       "sourceRow": 42
     },
@@ -406,7 +433,7 @@
       "sku": "ATN001017Z",
       "name": "Умный выключатель встраиваемый двухклавишный AtlasDesign Smart, с опц. нейтралью, модель SBDV-00200, цвет карбон",
       "description": "Электроустановочные изделия",
-      "price": 5990,
+      "price": 3690,
       "image": "/products/atn001017z.png",
       "badge": "новинка",
       "sourceRow": 43

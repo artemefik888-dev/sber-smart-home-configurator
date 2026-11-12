@@ -51,28 +51,29 @@ function readScenarios(workbook: XLSX.WorkBook): SourceData['scenarios'] {
 }
 
 function readCatalog(workbook: XLSX.WorkBook, fallback: SourceData) {
-  const sheetName = workbook.SheetNames.includes('Sber') ? 'Sber' : workbook.SheetNames[0];
+  const sheetName = 'Sber';
   const sheet = workbook.Sheets[sheetName];
   const rows = sheet ? rowsOf(sheet) : [];
   const fallbackImages = new Map(fallback.catalog.map((product) => [product.sku, product.image]));
   const products: CatalogProduct[] = [];
   const externalFormulaWithoutValue: string[] = [];
-  const priceHeader = text(rows[0]?.[5]);
+  const priceHeader = text(rows[0]?.[4]);
 
   for (let index = 1; index < rows.length; index += 1) {
     const row = rows[index];
-    const sku = text(row?.[1]);
+    const sku = text(row?.[0]);
     if (!sku) continue;
-    const cell = sheet?.[`F${index + 1}`] as XLSX.CellObject | undefined;
-    const price = row?.[5];
+    const cell = sheet?.[`E${index + 1}`] as XLSX.CellObject | undefined;
+    const price = row?.[4];
     if (cell?.f?.includes('[') && !isPrice(price)) externalFormulaWithoutValue.push(sku);
+    const normalizedPrice = isPrice(price) ? Math.round(price) : null;
     products.push({
       sku,
-      name: text(row?.[2]),
-      description: text(row?.[4]),
-      price: isPrice(price) ? price : null,
+      name: text(row?.[1]),
+      description: text(row?.[3]),
+      price: normalizedPrice,
       image: fallbackImages.get(sku) ?? null,
-      badge: text(row?.[6]),
+      badge: '',
       sourceRow: index + 1,
     });
   }
@@ -81,13 +82,13 @@ function readCatalog(workbook: XLSX.WorkBook, fallback: SourceData) {
     map[product.sku] = (map[product.sku] ?? 0) + 1;
     return map;
   }, {});
-  const priceDate = priceHeader.match(/\d{2}\.\d{2}\.\d{4}/)?.[0] ?? new Date().toLocaleDateString('ru-RU');
+  const priceVersion = priceHeader.match(/[1-4]Q\s+\d{4}/i)?.[0].toUpperCase() ?? fallback.meta.version;
   return {
     products,
     duplicateSku: Object.keys(counts).filter((sku) => counts[sku] > 1),
     invalidPriceSku: products.filter((product) => !isPrice(product.price)).map((product) => product.sku),
     externalFormulaWithoutValue,
-    priceDate,
+    priceVersion,
     sheetName,
   };
 }
@@ -171,8 +172,8 @@ export async function parseUpdatedFiles(
 
   const data: SourceData = {
     meta: {
-      version: `Импорт ${new Date().toLocaleDateString('ru-RU')}`,
-      priceDate: catalogResult.priceDate,
+      version: catalogResult.priceVersion,
+      priceDate: catalogResult.priceVersion,
       currency: 'RUB',
       minimumOrder: fallback.meta.minimumOrder,
       source: 'Импортированные данные · локально',

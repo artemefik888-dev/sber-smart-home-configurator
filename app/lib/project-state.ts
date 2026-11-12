@@ -11,6 +11,9 @@ import type {
 import { roomsFor } from './calculations.ts';
 
 export const MANUAL_ROOM_PLACEHOLDER = 'Назначить комнату';
+export const PROJECTS_STORAGE_KEY = 'sber-configurator-projects-v1';
+export const SOURCE_DATA_STORAGE_KEY = 'sber-configurator-source-data-v1';
+export const RELEASE3_MIGRATION_KEY = 'sber-configurator-release3-price-update-v1';
 export const MANUAL_ROOMS: ManualRoom[] = [
   'Прихожая/коридор',
   'Кухня',
@@ -97,4 +100,28 @@ export function normalizeProject(raw: unknown, data: SourceData): ConfiguratorPr
     manualRooms,
     readyQuantities,
   };
+}
+
+interface StorageReader {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+export function loadStoredRelease3State(storage: StorageReader, fallback: SourceData) {
+  const migrated = storage.getItem(RELEASE3_MIGRATION_KEY) === '1';
+  if (!migrated) {
+    storage.removeItem(SOURCE_DATA_STORAGE_KEY);
+    storage.setItem(RELEASE3_MIGRATION_KEY, '1');
+  }
+
+  const storedData = storage.getItem(SOURCE_DATA_STORAGE_KEY);
+  const data = storedData ? JSON.parse(storedData) as SourceData : fallback;
+  const storedProjects = storage.getItem(PROJECTS_STORAGE_KEY);
+  const parsedProjects = storedProjects ? JSON.parse(storedProjects) as unknown : [];
+  const projects = Array.isArray(parsedProjects)
+    ? parsedProjects.map((item) => normalizeProject(item, data))
+    : [];
+
+  return { data, projects, migrated: !migrated };
 }

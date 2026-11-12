@@ -30,16 +30,17 @@ import { parseUpdatedFiles } from '../lib/importer';
 import {
   defaultRoomMap,
   emptyReadyQuantities,
+  loadStoredRelease3State,
   MANUAL_HINTS,
   MANUAL_ROOM_PLACEHOLDER,
   MANUAL_ROOMS,
   normalizeProject,
+  PROJECTS_STORAGE_KEY,
+  SOURCE_DATA_STORAGE_KEY,
 } from '../lib/project-state';
 import { publicAsset } from '../lib/public-path';
 
 const DEFAULT_DATA = defaultDataJson as SourceData;
-const PROJECTS_KEY = 'sber-configurator-projects-v1';
-const DATA_KEY = 'sber-configurator-source-data-v1';
 const CATEGORIES: SmartCategory[] = ['Свет', 'Климат', 'Безопасность'];
 const currency = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat('ru-RU');
@@ -214,14 +215,10 @@ export default function Configurator() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
-        const storedData = localStorage.getItem(DATA_KEY);
-        const nextData = storedData ? JSON.parse(storedData) as SourceData : DEFAULT_DATA;
-        setData(nextData);
-        const storedProjects = localStorage.getItem(PROJECTS_KEY);
-        if (storedProjects) {
-          const parsed = JSON.parse(storedProjects) as unknown;
-          setSavedProjects(Array.isArray(parsed) ? parsed.map((item) => normalizeProject(item, nextData)) : []);
-        }
+        const stored = loadStoredRelease3State(localStorage, DEFAULT_DATA);
+        setData(stored.data);
+        setSavedProjects(stored.projects);
+        if (stored.migrated) setToast('Цены обновлены до 4Q 2026. Сохранённые проекты пересчитаны по новому прайсу.');
       } catch {
         setToast('Локальные данные не удалось прочитать. Используются встроенные исходные данные.');
       }
@@ -363,7 +360,7 @@ export default function Configurator() {
     const next = [project, ...savedProjects.filter((item) => item.id !== project.id)]
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     setSavedProjects(next);
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(next));
+    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
     setToast('Проект сохранён на этом устройстве.');
   }
 
@@ -381,7 +378,7 @@ export default function Configurator() {
     if (!window.confirm('Удалить сохранённый проект с этого устройства?')) return;
     const next = savedProjects.filter((item) => item.id !== id);
     setSavedProjects(next);
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(next));
+    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(next));
   }
 
   function resetProject() {
@@ -453,6 +450,7 @@ export default function Configurator() {
         color: project.color,
         rooms: compareRooms,
         categories: compareCategories,
+        data,
       });
       setToast('Excel со сравнением сформирован.');
     } catch {
@@ -476,7 +474,7 @@ export default function Configurator() {
   function applyImport() {
     if (!importReport?.valid || !importReport.data) return;
     setData(importReport.data);
-    localStorage.setItem(DATA_KEY, JSON.stringify(importReport.data));
+    localStorage.setItem(SOURCE_DATA_STORAGE_KEY, JSON.stringify(importReport.data));
     const next = makeProject(importReport.data);
     setProject(next);
     setSelectedRoom(next.selectedRooms.studio[0] ?? '');
@@ -486,7 +484,7 @@ export default function Configurator() {
 
   function resetData() {
     if (!window.confirm('Вернуться к встроенным данным? Импортированная версия будет удалена из этого браузера.')) return;
-    localStorage.removeItem(DATA_KEY);
+    localStorage.removeItem(SOURCE_DATA_STORAGE_KEY);
     setData(DEFAULT_DATA);
     const next = makeProject(DEFAULT_DATA);
     setProject(next);
@@ -573,7 +571,7 @@ export default function Configurator() {
             {importReport && <ImportReportView report={importReport} onApply={applyImport} />}
             {!importReport && (
               <article className="current-data-card">
-                <div><p className="panel-kicker">Текущая версия</p><h3>{data.meta.version}</h3><p>{data.meta.source} · РРЦ с {data.meta.priceDate}</p></div>
+                <div><p className="panel-kicker">Текущая версия</p><h3>{data.meta.version}</h3><p>{data.meta.source} · РРЦ {data.meta.version}</p></div>
                 <div className="source-metrics"><span><strong>{data.catalog.length}</strong> товаров</span><span><strong>{new Set(data.readyRows.map((row) => row.sku)).size}</strong> SKU в наборах</span><span><strong>4</strong> типа квартир</span></div>
               </article>
             )}
@@ -633,7 +631,7 @@ export default function Configurator() {
                     <div className="plan-stage"><PlanView apartment={project.apartment} rooms={availableRooms} selectedRooms={project.mode === 'rooms' ? activeRooms : availableRooms} rows={readyRowsForPlan} interactive={project.mode === 'rooms'} selectedRoom={selectedRoom} onSelectRoom={setSelectedRoom} onToggleRoom={toggleRoom} zoom={zoom} /></div>
                     {project.mode === 'rooms' && <div className="rooms-strip">{availableRooms.map((room) => { const roomRows = readyRowsForPlan.filter((row) => row.room === room); const subtotal = roomRows.reduce((sum, row) => sum + row.amount, 0); return <label key={room}><input type="checkbox" checked={activeRooms.includes(room)} onChange={() => toggleRoom(room)} /><span onClick={() => setSelectedRoom(room)}><strong>{room}</strong><small>{roomRows.reduce((sum, row) => sum + row.quantity, 0)} шт. · {currency.format(subtotal)}</small></span></label>; })}</div>}
                   </article>
-                  <DetailsPanel product={selectedProduct} room={selectedRoom} roomRows={selectedRoomRows} onSelectProduct={setSelectedSku} clearProduct={() => setSelectedSku(null)} />
+                  <DetailsPanel product={selectedProduct} room={selectedRoom} roomRows={selectedRoomRows} priceVersion={data.meta.version} onSelectProduct={setSelectedSku} clearProduct={() => setSelectedSku(null)} />
                 </div>
               )}
             </section>
@@ -655,7 +653,7 @@ export default function Configurator() {
               <div className="section-heading"><div><p className="panel-kicker">Сценарии из исходного Excel</p><h2>Что умеет выбранная конфигурация</h2></div><span>{scenarios.reduce((sum, group) => sum + group.items.length, 0)} сценариев</span></div>
               {scenarios.length ? <div className="scenario-grid">{scenarios.map((group) => <article key={group.category}><span className={`category-icon ${group.category.toLowerCase()}`}>{categoryMeta[group.category].letter}</span><h3>{group.category}</h3><p>{group.intro}</p><ul>{group.items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}</div> : <div className="empty-state"><strong>Сценарии пока не определены</strong><p>Для этого ручного состава нет прямой связи со сценариями из исходного файла.</p></div>}
             </section>
-            <footer className="app-footer"><span>Данные: {data.meta.version} · РРЦ с {data.meta.priceDate}</span><span>Общий итог включает только оборудование. НДС включён в РРЦ.</span></footer>
+            <footer className="app-footer"><span>Данные и РРЦ: {data.meta.version}</span><span>Общий итог включает только оборудование. НДС включён в РРЦ.</span></footer>
           </section>
         )}
       </div>
@@ -663,27 +661,27 @@ export default function Configurator() {
       {showProjects && <Modal title="Сохранённые проекты" onClose={() => setShowProjects(false)}><div className="saved-projects">{savedProjects.length ? savedProjects.map((item) => { const savedApartment = data.apartments.find((apartmentItem) => apartmentItem.key === item.apartment); return <article key={item.id}><div><strong>{item.name}</strong><span>{item.number}</span><small>{savedApartment?.name} · {modeLabel[item.mode]} · {new Date(item.updatedAt).toLocaleString('ru-RU')}</small></div><div><button className="button-secondary" onClick={() => openProject(item)}>Открыть</button><button className="button-danger-quiet" onClick={() => deleteProject(item.id)}>Удалить</button></div></article>; }) : <div className="empty-state"><strong>Сохранённых проектов нет</strong><p>Назовите текущий проект и нажмите «Сохранить».</p></div>}</div></Modal>}
       {showCompare && <CompareModal rooms={compareRooms} categories={compareCategories} selectedCategories={project.selectedCategories} onClose={() => setShowCompare(false)} onExport={downloadComparison} />}
       {showClient && <ClientView project={project} apartment={apartment} data={data} rows={result.rows} total={result.total} devices={result.devices} scenarios={scenarios} onClose={() => setShowClient(false)} onExcel={downloadExcel} onPdf={downloadPdf} />}
-      {project.mode === 'manual' && selectedProduct && <ProductModal product={selectedProduct} quantity={project.manualCart[selectedProduct.sku] ?? 0} onAdd={() => addToCart(selectedProduct.sku)} onClose={() => setSelectedSku(null)} />}
+      {project.mode === 'manual' && selectedProduct && <ProductModal product={selectedProduct} priceVersion={data.meta.version} quantity={project.manualCart[selectedProduct.sku] ?? 0} onAdd={() => addToCart(selectedProduct.sku)} onClose={() => setSelectedSku(null)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 }
 
-function ProductModal({ product, quantity, onAdd, onClose }: { product: SourceData['catalog'][number]; quantity: number; onAdd: () => void; onClose: () => void }) {
-  return <Modal title="Карточка товара" onClose={onClose}><div className="product-modal-grid"><div className="product-modal-image">{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}</div><div><p className="sku-line">{product.sku}</p><h2>{product.name}</h2><p className="product-description">{product.description || 'Описание отсутствует в каталоге.'}</p>{product.badge && <span className="product-badge inline">{product.badge}</span>}<div className="room-summary"><span>Актуальная РРЦ</span><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong></div><button className="button-primary product-modal-add" disabled={typeof product.price !== 'number'} onClick={onAdd}>{quantity ? `Добавить ещё · сейчас ${quantity}` : 'Добавить в спецификацию'}</button></div></div></Modal>;
+function ProductModal({ product, priceVersion, quantity, onAdd, onClose }: { product: SourceData['catalog'][number]; priceVersion: string; quantity: number; onAdd: () => void; onClose: () => void }) {
+  return <Modal title="Карточка товара" onClose={onClose}><div className="product-modal-grid"><div className="product-modal-image">{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}</div><div><p className="sku-line">{product.sku}</p><h2>{product.name}</h2><p className="product-description">{product.description || 'Описание отсутствует в каталоге.'}</p>{product.badge && <span className="product-badge inline">{product.badge}</span>}<div className="room-summary"><span>РРЦ {priceVersion}</span><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong></div><button className="button-primary product-modal-add" disabled={typeof product.price !== 'number'} onClick={onAdd}>{quantity ? `Добавить ещё · сейчас ${quantity}` : 'Добавить в спецификацию'}</button></div></div></Modal>;
 }
 
-function DetailsPanel({ product, room, roomRows, onSelectProduct, clearProduct }: { product: SourceData['catalog'][number] | undefined | null; room: string; roomRows: SpecificationRow[]; onSelectProduct: (sku: string) => void; clearProduct: () => void }) {
+function DetailsPanel({ product, room, roomRows, priceVersion, onSelectProduct, clearProduct }: { product: SourceData['catalog'][number] | undefined | null; room: string; roomRows: SpecificationRow[]; priceVersion: string; onSelectProduct: (sku: string) => void; clearProduct: () => void }) {
   if (product) {
     const usage = roomRows.filter((row) => row.sku === product.sku).reduce((sum, row) => sum + row.quantity, 0);
-    return <aside className="details-card"><button className="back-link" onClick={clearProduct}>← К помещению</button><div className="product-hero">{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}</div><p className="panel-kicker">Карточка товара</p><h2>{product.name}</h2><p className="sku-line">{product.sku}</p><p className="product-description">{product.description || 'Описание отсутствует в каталоге.'}</p><div className="room-summary"><span>Актуальная РРЦ</span><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong></div><dl className="product-facts"><div><dt>В выбранном помещении</dt><dd>{usage || '—'}</dd></div><div><dt>Источник</dt><dd>Каталог 2Q 2026</dd></div></dl></aside>;
+    return <aside className="details-card"><button className="back-link" onClick={clearProduct}>← К помещению</button><div className="product-hero">{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}</div><p className="panel-kicker">Карточка товара</p><h2>{product.name}</h2><p className="sku-line">{product.sku}</p><p className="product-description">{product.description || 'Описание отсутствует в каталоге.'}</p><div className="room-summary"><span>РРЦ {priceVersion}</span><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong></div><dl className="product-facts"><div><dt>В выбранном помещении</dt><dd>{usage || '—'}</dd></div><div><dt>Источник</dt><dd>Каталог {priceVersion}</dd></div></dl></aside>;
   }
   const subtotal = roomRows.reduce((sum, row) => sum + row.amount, 0);
   return <aside className="details-card"><p className="panel-kicker">Выбранное помещение</p><h2>{room || 'Помещение не выбрано'}</h2><p className="muted">{roomRows.reduce((sum, row) => sum + row.quantity, 0)} устройств</p><div className="room-summary"><span>Стоимость помещения</span><strong>{currency.format(subtotal)}</strong></div><div className="device-list">{roomRows.map((row) => <button onClick={() => onSelectProduct(row.sku)} key={row.id}><ProductImage row={row} compact /><span><strong>{row.name}</strong><small>{row.sku} · {row.quantity} шт.</small></span><b>{currency.format(row.amount)}</b></button>)}</div>{!roomRows.length && <div className="empty-state small"><strong>Нет выбранных устройств</strong><p>Включите помещение или выберите другое.</p></div>}</aside>;
 }
 
 function ManualConfiguration({ data, project, filteredCatalog, catalogGroups, catalogSearch, catalogCategory, uploadedPlan, planInput, setCatalogSearch, setCatalogCategory, setCartQuantity, addToCart, setSelectedSku, handlePlanFile, clearPlan }: { data: SourceData; project: ConfiguratorProject; filteredCatalog: SourceData['catalog']; catalogGroups: string[]; catalogSearch: string; catalogCategory: string; uploadedPlan: { url: string; type: string; name: string } | null; planInput: React.RefObject<HTMLInputElement | null>; setCatalogSearch: (value: string) => void; setCatalogCategory: (value: string) => void; setCartQuantity: (sku: string, quantity: number) => void; addToCart: (sku: string) => void; setSelectedSku: (sku: string) => void; handlePlanFile: (file?: File) => void; clearPlan: () => void }) {
-  return <div className="manual-layout"><section className="manual-sidebar"><article className="manual-card"><div className="card-heading compact-heading"><div><p className="panel-kicker">Визуальная подложка</p><h2>Собственный план</h2></div></div><div className="manual-plan">{uploadedPlan ? <><PlanView apartment={project.apartment} rooms={[]} selectedRooms={[]} rows={[]} interactive={false} selectedRoom="" onSelectRoom={() => undefined} onToggleRoom={() => undefined} zoom={100} uploadedPlan={uploadedPlan} /><button className="button-danger-quiet" onClick={clearPlan}>Удалить подложку</button></> : <div className="plan-upload-empty"><span>PDF · JPG · PNG</span><strong>Загрузите план квартиры</strong><p>Он будет только визуальной подложкой. Комнаты и устройства не распознаются.</p><button className="button-secondary" onClick={() => planInput.current?.click()}>Выбрать файл</button></div>}<input ref={planInput} hidden type="file" accept="image/png,image/jpeg,application/pdf" onChange={(event) => handlePlanFile(event.target.files?.[0])} /></div></article><article className="manual-card hints-card"><p className="panel-kicker">Поля для самопроверки</p><h2>Подсказки комплектации</h2><p>Количество связано со строкой товара в ручной спецификации.</p><div className="hint-grid">{MANUAL_HINTS.map(({ label, displayName, help, sku }) => { const product = data.catalog.find((item) => item.sku === sku); const quantity = project.manualCart[sku] ?? 0; return <label key={product?.sku ?? sku}><span>{label}</span><input aria-label={label} type="number" min="0" max="999" value={quantity} onChange={(event) => setCartQuantity(sku, Number(event.target.value))} /><strong>{displayName}</strong><small>{help}</small>{quantity > 0 && <small className="replacement-hint">Уже в спецификации: {quantity} шт. Новое значение заменит текущее количество.</small>}</label>; })}</div></article></section><section className="catalog-card"><div className="spec-heading"><div><p className="panel-kicker">Актуальный прайс-лист</p><h2>Каталог оборудования</h2><p>{data.catalog.length} товаров · цены с {data.meta.priceDate}</p></div></div><div className="spec-filters"><label className="search-field"><span>⌕</span><input placeholder="Название или SKU" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} /></label><select aria-label="Фильтр каталога" value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)}><option value="all">Все группы</option>{catalogGroups.map((group) => <option key={group}>{group}</option>)}</select></div><div className="catalog-grid">{filteredCatalog.map((product) => <article className="product-card" key={product.sku}><button className="product-preview" onClick={() => setSelectedSku(product.sku)}>{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}{product.badge && <span className="product-badge">{product.badge}</span>}</button><div><span className="sku-line">{product.sku}</span><h3>{product.name}</h3><p>{product.description}</p></div><footer><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong><button className="button-primary" disabled={typeof product.price !== 'number'} onClick={() => addToCart(product.sku)}>{project.manualCart[product.sku] ? `Добавлено: ${project.manualCart[product.sku]}` : 'Добавить'}</button></footer></article>)}</div></section></div>;
+  return <div className="manual-layout"><section className="manual-sidebar"><article className="manual-card"><div className="card-heading compact-heading"><div><p className="panel-kicker">Визуальная подложка</p><h2>Собственный план</h2></div></div><div className="manual-plan">{uploadedPlan ? <><PlanView apartment={project.apartment} rooms={[]} selectedRooms={[]} rows={[]} interactive={false} selectedRoom="" onSelectRoom={() => undefined} onToggleRoom={() => undefined} zoom={100} uploadedPlan={uploadedPlan} /><button className="button-danger-quiet" onClick={clearPlan}>Удалить подложку</button></> : <div className="plan-upload-empty"><span>PDF · JPG · PNG</span><strong>Загрузите план квартиры</strong><p>Он будет только визуальной подложкой. Комнаты и устройства не распознаются.</p><button className="button-secondary" onClick={() => planInput.current?.click()}>Выбрать файл</button></div>}<input ref={planInput} hidden type="file" accept="image/png,image/jpeg,application/pdf" onChange={(event) => handlePlanFile(event.target.files?.[0])} /></div></article><article className="manual-card hints-card"><p className="panel-kicker">Поля для самопроверки</p><h2>Подсказки комплектации</h2><p>Количество связано со строкой товара в ручной спецификации.</p><div className="hint-grid">{MANUAL_HINTS.map(({ label, displayName, help, sku }) => { const product = data.catalog.find((item) => item.sku === sku); const quantity = project.manualCart[sku] ?? 0; return <label key={product?.sku ?? sku}><span>{label}</span><input aria-label={label} type="number" min="0" max="999" value={quantity} onChange={(event) => setCartQuantity(sku, Number(event.target.value))} /><strong>{displayName}</strong><small>{help}</small>{quantity > 0 && <small className="replacement-hint">Уже в спецификации: {quantity} шт. Новое значение заменит текущее количество.</small>}</label>; })}</div></article></section><section className="catalog-card"><div className="spec-heading"><div><p className="panel-kicker">Актуальный прайс-лист</p><h2>Каталог оборудования</h2><p>{data.catalog.length} товаров · РРЦ {data.meta.version}</p></div></div><div className="spec-filters"><label className="search-field"><span>⌕</span><input placeholder="Название или SKU" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} /></label><select aria-label="Фильтр каталога" value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)}><option value="all">Все группы</option>{catalogGroups.map((group) => <option key={group}>{group}</option>)}</select></div><div className="catalog-grid">{filteredCatalog.map((product) => <article className="product-card" key={product.sku}><button className="product-preview" onClick={() => setSelectedSku(product.sku)}>{product.image ? <img src={publicAsset(product.image)} alt={product.name} /> : <span className="product-placeholder">{product.sku.slice(0, 2)}</span>}{product.badge && <span className="product-badge">{product.badge}</span>}</button><div><span className="sku-line">{product.sku}</span><h3>{product.name}</h3><p>{product.description}</p></div><footer><strong>{typeof product.price === 'number' ? currency.format(product.price) : 'Нет цены'}</strong><button className="button-primary" disabled={typeof product.price !== 'number'} onClick={() => addToCart(product.sku)}>{project.manualCart[product.sku] ? `Добавлено: ${project.manualCart[product.sku]}` : 'Добавить'}</button></footer></article>)}</div></section></div>;
 }
 
 function ImportReportView({ report, onApply }: { report: ImportReport; onApply: () => void }) {
@@ -710,5 +708,5 @@ function CompareModal({ rooms, categories, selectedCategories, onClose, onExport
 }
 
 function ClientView({ project, apartment, data, rows, total, devices, scenarios, onClose, onExcel, onPdf }: { project: ConfiguratorProject; apartment: Apartment; data: SourceData; rows: SpecificationRow[]; total: number; devices: number; scenarios: SourceData['scenarios']; onClose: () => void; onExcel: () => void; onPdf: () => void }) {
-  return <div className="client-view" role="dialog" aria-modal="true" aria-label="Клиентский вид"><header><img src={publicAsset('/sber-smart-home-logo.jpg')} alt="Умный дом Sber" /><div className="client-actions"><button onClick={onExcel}>Excel</button><button onClick={onPdf}>PDF</button><a href="https://sberdevices.ru/b2b/" target="_blank" rel="noreferrer">Оформить заказ</a><button onClick={onClose}>Закрыть</button></div></header><main><section className="client-title"><p>Проект {project.number}</p><h1>{project.name}</h1><span>{apartment.name} · {apartment.area} · {modeLabel[project.mode]} · {project.color === 'white' ? 'Белый' : 'Карбон'}</span></section><section className="client-metrics"><article><span>Устройств</span><strong>{devices}</strong></article></section>{total < data.meta.minimumOrder && rows.length > 0 && <div className="alert warning"><strong>Минимальная сумма заказа — {currency.format(data.meta.minimumOrder)}.</strong> Состав и итог не изменены.</div>}<section className="client-section"><h2>Спецификация</h2><div className="table-scroll"><table><thead><tr><th>Категория</th><th>Помещение</th><th>Наименование</th><th>SKU</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.category}</td><td>{row.room}</td><td>{row.name}{statusText(row) && <small className="inline-status">{statusText(row)}</small>}</td><td>{row.sku}</td><td>{row.quantity}</td><td>{currency.format(row.price)}</td><td>{currency.format(row.amount)}</td></tr>)}</tbody></table></div></section><section className="client-total"><span>Общий итог</span><strong>{currency.format(total)}</strong></section><section className="client-section"><h2>Сценарии</h2>{scenarios.length ? <div className="client-scenarios">{scenarios.map((group) => <article key={group.category}><h3>{group.category}</h3><p>{group.intro}</p><ul>{group.items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}</div> : <p>Для текущего состава сценарии из источника не определены.</p>}</section><footer><span>Данные: {data.meta.version} · РРЦ с {data.meta.priceDate}</span></footer></main></div>;
+  return <div className="client-view" role="dialog" aria-modal="true" aria-label="Клиентский вид"><header><img src={publicAsset('/sber-smart-home-logo.jpg')} alt="Умный дом Sber" /><div className="client-actions"><button onClick={onExcel}>Excel</button><button onClick={onPdf}>PDF</button><a href="https://sberdevices.ru/b2b/" target="_blank" rel="noreferrer">Оформить заказ</a><button onClick={onClose}>Закрыть</button></div></header><main><section className="client-title"><p>Проект {project.number}</p><h1>{project.name}</h1><span>{apartment.name} · {apartment.area} · {modeLabel[project.mode]} · {project.color === 'white' ? 'Белый' : 'Карбон'}</span></section><section className="client-metrics"><article><span>Устройств</span><strong>{devices}</strong></article></section>{total < data.meta.minimumOrder && rows.length > 0 && <div className="alert warning"><strong>Минимальная сумма заказа — {currency.format(data.meta.minimumOrder)}.</strong> Состав и итог не изменены.</div>}<section className="client-section"><h2>Спецификация</h2><div className="table-scroll"><table><thead><tr><th>Категория</th><th>Помещение</th><th>Наименование</th><th>SKU</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.category}</td><td>{row.room}</td><td>{row.name}{statusText(row) && <small className="inline-status">{statusText(row)}</small>}</td><td>{row.sku}</td><td>{row.quantity}</td><td>{currency.format(row.price)}</td><td>{currency.format(row.amount)}</td></tr>)}</tbody></table></div></section><section className="client-total"><span>Общий итог</span><strong>{currency.format(total)}</strong></section><section className="client-section"><h2>Сценарии</h2>{scenarios.length ? <div className="client-scenarios">{scenarios.map((group) => <article key={group.category}><h3>{group.category}</h3><p>{group.intro}</p><ul>{group.items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}</div> : <p>Для текущего состава сценарии из источника не определены.</p>}</section><footer><span>Данные и РРЦ: {data.meta.version}</span></footer></main></div>;
 }

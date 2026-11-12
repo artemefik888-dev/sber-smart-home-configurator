@@ -31,20 +31,20 @@ function calculate(apartment, color, mode, options = {}) {
   };
 }
 
-assert.equal(data.catalog.length, 42, 'Catalog product count');
-assert.equal(new Set(data.catalog.map((product) => product.sku)).size, 42, 'Catalog SKU uniqueness');
+assert.equal(data.catalog.length, 45, 'Catalog product count');
+assert.equal(new Set(data.catalog.map((product) => product.sku)).size, 45, 'Catalog SKU uniqueness');
 assert.equal(data.readyRows.length, 152, 'Normalized ready row count');
 assert.equal(new Set(data.readyRows.map((row) => row.sku)).size, 15, 'Ready-set SKU count');
 
 const expected = {
-  'studio:white': [49080, 83060],
-  'studio:carbon': [53980, 88760],
-  'one:white': [60850, 102810],
-  'one:carbon': [66750, 111110],
-  'two:white': [84600, 126560],
-  'two:carbon': [92700, 137060],
-  'three:white': [102360, 148310],
-  'three:carbon': [111460, 160610],
+  'studio:white': [42280, 75060],
+  'studio:carbon': [45780, 79060],
+  'one:white': [54450, 92810],
+  'one:carbon': [58550, 98410],
+  'two:white': [74200, 112560],
+  'two:carbon': [79400, 119260],
+  'three:white': [90160, 131310],
+  'three:carbon': [95860, 139010],
 };
 
 for (const [variant, [roomsTotal, categoriesTotal]] of Object.entries(expected)) {

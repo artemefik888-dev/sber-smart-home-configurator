@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 CALCULATIONS = ROOT / "source-data" / "typical-apartments.xlsx"
-CATALOG = ROOT / "source-data" / "catalog-2Q-2026.xlsx"
+CATALOG = ROOT / "source-data" / "catalog-4Q-2026.xlsx"
 OUTPUT = ROOT / "app" / "data" / "default-data.json"
 PRODUCT_IMAGES = ROOT / "public" / "products"
 
@@ -54,6 +54,25 @@ def image_name(sku: str, extension: str) -> str:
     return f"{safe}.{extension.lower().replace('jpeg', 'jpg')}"
 
 
+def image_center_row(sheet: Any, image: Any) -> int:
+    default_height = sheet.sheet_format.defaultRowHeight or 15
+
+    def row_top_emu(row: int) -> float:
+        return sum((sheet.row_dimensions[index].height or default_height) * 12700 for index in range(1, row))
+
+    anchor = image.anchor
+    start = row_top_emu(anchor._from.row + 1) + anchor._from.rowOff
+    if hasattr(anchor, "to"):
+        end = row_top_emu(anchor.to.row + 1) + anchor.to.rowOff
+    else:
+        end = start + anchor.ext.cy
+    center = (start + end) / 2
+    for row in range(1, sheet.max_row + 2):
+        if center < row_top_emu(row + 1):
+            return row
+    return anchor._from.row + 1
+
+
 def read_catalog() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
     formulas = load_workbook(CATALOG, data_only=False, read_only=False)
     values = load_workbook(CATALOG, data_only=True, read_only=False)
@@ -63,8 +82,8 @@ def read_catalog() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dic
 
     image_by_row: dict[int, str] = {}
     for image in sheet._images:
-        row = image.anchor._from.row + 1
-        sku = plain(sheet.cell(row=row, column=2).value)
+        row = image_center_row(sheet, image)
+        sku = plain(sheet.cell(row=row, column=1).value)
         if not sku or row in image_by_row:
             continue
         filename = image_name(sku, image.format or "png")
@@ -75,11 +94,11 @@ def read_catalog() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dic
     external_formula_count = 0
     external_formula_without_value = 0
     for row in range(2, sheet.max_row + 1):
-        sku = plain(sheet.cell(row=row, column=2).value)
+        sku = plain(sheet.cell(row=row, column=1).value)
         if not sku:
             continue
-        formula_price = sheet.cell(row=row, column=6).value
-        price = value_sheet.cell(row=row, column=6).value
+        formula_price = sheet.cell(row=row, column=5).value
+        price = value_sheet.cell(row=row, column=5).value
         if isinstance(formula_price, str) and formula_price.startswith("=") and "[" in formula_price:
             external_formula_count += 1
             if not isinstance(price, (int, float)):
@@ -87,11 +106,11 @@ def read_catalog() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dic
         products.append(
             {
                 "sku": sku,
-                "name": plain(sheet.cell(row=row, column=3).value),
-                "description": plain(sheet.cell(row=row, column=5).value),
-                "price": price if isinstance(price, (int, float)) else None,
+                "name": plain(sheet.cell(row=row, column=2).value),
+                "description": plain(sheet.cell(row=row, column=4).value),
+                "price": round(price) if isinstance(price, (int, float)) else None,
                 "image": image_by_row.get(row),
-                "badge": plain(sheet.cell(row=row, column=7).value),
+                "badge": "",
                 "sourceRow": row,
             }
         )
@@ -196,7 +215,7 @@ def read_ready_sets(catalog_by_sku: dict[str, dict[str, Any]]) -> tuple[list[dic
             {
                 "code": "one-room-gift-price",
                 "severity": "warning",
-                "message": "В белом блоке 1К для подарочного выключателя сохранена старая цена 5 990 ₽; применяется РРЦ каталога 3 990 ₽.",
+                "message": "В белом блоке 1К для подарочного выключателя сохранена старая цена 5 990 ₽; применяется РРЦ каталога 2 590 ₽.",
             },
             {
                 "code": "two-room-bath-total",
@@ -239,11 +258,11 @@ def main() -> None:
     ready_rows, calculation_diagnostics = read_ready_sets(catalog_by_sku)
     data = {
         "meta": {
-            "version": "2Q 2026",
-            "priceDate": "07.04.2026",
+            "version": "4Q 2026",
+            "priceDate": "4Q 2026",
             "currency": "RUB",
             "minimumOrder": 15000,
-            "source": "Встроенные исходные данные",
+            "source": "Прайс-лист Умный дом Sber · 4Q 2026",
         },
         "apartments": list(APARTMENTS.values()),
         "catalog": products,

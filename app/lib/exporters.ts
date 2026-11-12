@@ -55,7 +55,8 @@ function projectRows(context: ExportContext): (string | number)[][] {
     ['Режим расчёта', modeLabel[context.mode]],
     ['Цвет оборудования', colorLabel[context.color]],
     ['Дата выгрузки', new Date().toLocaleString('ru-RU')],
-    ['Версия данных', `${context.data.meta.version}; цены с ${context.data.meta.priceDate}`],
+    ['Версия данных', context.data.meta.version],
+    ['Прайс-лист', `РРЦ ${context.data.meta.version}`],
     ['Количество устройств', context.devices],
     ['Итог оборудования', context.total],
     ['Предупреждение', warning],
@@ -67,7 +68,7 @@ export async function exportExcel(context: ExportContext) {
   const workbook = XLSX.utils.book_new();
   const project = XLSX.utils.aoa_to_sheet(projectRows(context));
   project['!cols'] = [{ wch: 24 }, { wch: 70 }];
-  if (project.B9) project.B9.z = '#,##0 "₽"';
+  if (project.B10) project.B10.z = '#,##0 "₽"';
   XLSX.utils.book_append_sheet(workbook, project, 'Проект');
 
   const specification = XLSX.utils.aoa_to_sheet([
@@ -109,6 +110,7 @@ export async function exportComparisonExcel(context: {
   color: EquipmentColor;
   rooms: CalculationResult;
   categories: CalculationResult;
+  data: SourceData;
 }) {
   const XLSX = await import('xlsx');
   const workbook = XLSX.utils.book_new();
@@ -119,6 +121,8 @@ export async function exportComparisonExcel(context: {
       ['Квартира', `${context.apartment.name}, ${context.apartment.area}`],
       ['Режим расчёта', title],
       ['Цвет оборудования', colorLabel[context.color]],
+      ['Версия данных', context.data.meta.version],
+      ['Прайс-лист', `РРЦ ${context.data.meta.version}`],
       [],
       ['Категория', 'Помещение', 'Название товара', 'SKU', 'Количество', 'Цена за единицу', 'Сумма', 'Статус'],
       ...result.rows.map((row) => [
@@ -212,7 +216,7 @@ export async function exportPdf(context: ExportContext) {
       },
       { text: 'Спецификация', style: 'section' },
       { table: { headerRows: 1, widths: [46, 68, '*', 34, 55, 58, 54], body }, layout: { fillColor: (rowIndex) => rowIndex === 0 ? '#148f66' : rowIndex % 2 === 0 ? '#f3f7f4' : null, hLineColor: '#d8e2dc', vLineColor: '#d8e2dc', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 5, paddingBottom: () => 5 } },
-      { columns: [{ text: `Версия данных: ${context.data.meta.version}\nРРЦ с ${context.data.meta.priceDate}`, color: '#66736c', fontSize: 8, margin: [0, 12, 0, 0] }, { text: `Итого: ${currency.format(context.total)}`, alignment: 'right', bold: true, fontSize: 15, color: '#08734f', margin: [0, 12, 0, 0] }] },
+      { columns: [{ text: `Версия данных: ${context.data.meta.version}\nРРЦ ${context.data.meta.version}`, color: '#66736c', fontSize: 8, margin: [0, 12, 0, 0] }, { text: `Итого: ${currency.format(context.total)}`, alignment: 'right', bold: true, fontSize: 15, color: '#08734f', margin: [0, 12, 0, 0] }] },
       ...(belowMinimum ? [{ text: `Сумма меньше минимального заказа ${currency.format(context.data.meta.minimumOrder)}. Состав и итог не изменены.`, color: '#8b5c00', bold: true, margin: [0, 10, 0, 0] as [number, number, number, number] }] : []),
       { text: 'Сценарии', style: 'section', pageBreak: context.rows.length > 14 ? 'before' as const : undefined },
       ...(context.scenarios.length
